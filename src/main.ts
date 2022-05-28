@@ -21,6 +21,7 @@ const main = async () => {
     const energy = horses.map((h) => ({
       name: h.horse_name,
       energy: h.energy,
+      points: h.points,
     }));
     console.log(energy);
     const horseToRace = horses.filter(
