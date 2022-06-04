@@ -1,4 +1,3 @@
-import { personalSign } from "@metamask/eth-sig-util";
 import axios from "axios";
 import { Provider } from "./provider";
 import delay from "delay";
@@ -16,31 +15,34 @@ let token: string;
 const main = async () => {
   let gains = 0;
   while (true) {
-    token = await connect();
-    let horses: any[] = await listHorses();
-    const energy = horses.map((h) => ({
-      name: h.horse_name,
-      energy: h.energy,
-      points: h.points,
-    }));
-    console.log(energy);
-    const horseToRace = horses.filter(
-      (h) => h.daily_reward_countdown < 0 || h.energy === 10
-    );
-    const results = await findRace(horseToRace);
-    if (results.length) {
-      console.log("results", results);
-      gains = results.reduce(
-        (acc, r) => acc + r.gain - raceFees[r.class as raceClass],
-        gains
+    try {
+      token = await connect();
+      let horses: any[] = await listHorses();
+      const energy = horses.map((h) => ({
+        name: h.horse_name,
+        energy: h.energy,
+        points: h.points,
+      }));
+      console.log(energy);
+      const horseToRace = horses.filter(
+        (h) => h.daily_reward_countdown < 0 || h.energy === 10
       );
-      console.log("total gains", gains);
-      horses = await listHorses();
-      if (horses.some((h) => h.daily_reward_countdown < 0)) {
-        continue;
+      const results = await findRace(horseToRace);
+      if (results.length) {
+        console.log("results", results);
+        gains = results.reduce(
+          (acc, r) => acc + r.gain - raceFees[r.class as raceClass],
+          gains
+        );
+        console.log("total gains", gains);
+        horses = await listHorses();
+        if (horses.some((h) => h.daily_reward_countdown < 0)) {
+          continue;
+        }
       }
+    } catch (err: any) {
+      console.log("err:", err?.code, err?.message);
     }
-
     await delay(LOOP_TIME_MIN * 60 * 1000);
   }
 };
@@ -90,11 +92,7 @@ const connect = async (): Promise<string> => {
     wallet_addr: await provider.adminWallet.getAddress(),
     timestamp: Math.floor(Date.now() / 1000),
   };
-
-  const signature = personalSign({
-    privateKey: provider.pkeyBuf,
-    data: Buffer.from(JSON.stringify(msg)),
-  });
+  const signature = provider.signMessage(JSON.stringify(msg));
 
   const login = await axios.post(`${API}/account/launcher`, {
     json_string: JSON.stringify(msg),
@@ -164,6 +162,7 @@ const findRace = async (horses: any[]): Promise<any[]> => {
 
   await Promise.all(
     races.map(async (r) => {
+      let n = 1;
       while (!r.raceId) {
         let res;
         try {
@@ -184,7 +183,9 @@ const findRace = async (horses: any[]): Promise<any[]> => {
           console.log("err?.message", err?.message);
           return;
         }
-        console.log(".", r.name);
+        const anim = `${r.name} -${" ".repeat(n)}🏇`;
+        console.log(anim);
+        n++;
         r.raceId = res?.data?.data?.racing_id;
 
         if (!r.raceId) {
@@ -197,45 +198,54 @@ const findRace = async (horses: any[]): Promise<any[]> => {
     })
   );
 
-  for (const race of races) {
-    let message;
-    let results;
-    while (message !== "success") {
-      const match = await axios.post(
-        `${API}/race/race_settlement`,
-        {
-          horse_id: race.horseId,
-          racing_id: race.raceId,
-        },
-        {
-          headers: {
-            "Content-Type": "application/json; charset=utf-8",
-            token,
+  await Promise.all(
+    races.map(async (race) => {
+      let message;
+      let results;
+      let n = 1;
+      while (message !== "success") {
+        const match = await axios.post(
+          `${API}/race/race_settlement`,
+          {
+            horse_id: race.horseId,
+            racing_id: race.raceId,
           },
-        }
-      );
-      console.log(".", race.name);
-      message = match.data.message;
-      results = match.data.data;
-      await delay(2000);
-    }
-    race.rank = results.rank;
-    const gain = results.Award
-      ? parseInt(ethers.utils.formatEther(ethers.BigNumber.from(results.Award)))
-      : 0;
-    const daily_reward = results.daily_reward
-      ? parseInt(
-          ethers.utils.formatEther(ethers.BigNumber.from(results.daily_reward))
-        )
-      : 0;
-    race.gain = gain + daily_reward;
-    race.mmr = results.delta_point;
+          {
+            headers: {
+              "Content-Type": "application/json; charset=utf-8",
+              token,
+            },
+          }
+        );
+        const anim = `${race.name} -${" ".repeat(n)}🏇`;
+        console.log(anim);
+        n++;
+        message = match.data.message;
+        results = match.data.data;
+        await delay(5000);
+      }
+      race.rank = results.rank;
+      const gain = results.Award
+        ? parseInt(
+            ethers.utils.formatEther(ethers.BigNumber.from(results.Award))
+          )
+        : 0;
+      const daily_reward = results.daily_reward
+        ? parseInt(
+            ethers.utils.formatEther(
+              ethers.BigNumber.from(results.daily_reward)
+            )
+          )
+        : 0;
+      race.gain = gain + daily_reward;
+      race.mmr = results.delta_point;
 
-    console.log(`${race.name} race_settlement`, results);
-    console.log(`${race.name} rank`, results.rank);
-    console.log(`${race.name} points`, results.delta_point);
-    console.log(`${race.name} gain`, gain);
-  }
+      console.log(`${race.name} race_settlement`, results);
+      console.log(`${race.name} rank`, results.rank);
+      console.log(`${race.name} points`, results.delta_point);
+      console.log(`${race.name} gain`, gain);
+    })
+  );
 
   return races;
 };
@@ -243,11 +253,8 @@ const findRace = async (horses: any[]): Promise<any[]> => {
 // derby withdraw632278
 const withdraw = async (hash: number) => {
   const msg = "derby withdraw" + hash;
-  console.log("msg", msg);
-  const signature = personalSign({
-    privateKey: provider.pkeyBuf,
-    data: Buffer.from(msg),
-  });
+  const signature = provider.signMessage(msg);
+
   const list = await axios.post(
     `${API}/user/wallet_claim`,
     {

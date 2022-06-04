@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { personalSign } from "@metamask/eth-sig-util";
 
 export class Provider {
   public provider: ethers.providers.JsonRpcProvider;
@@ -21,4 +22,11 @@ export class Provider {
 
     this.pkeyBuf = Buffer.from(this.adminWallet.privateKey.substring(2), "hex");
   }
+
+  signMessage = (msg: string): string => {
+    return personalSign({
+      privateKey: this.pkeyBuf,
+      data: Buffer.from(msg),
+    });
+  };
 }
