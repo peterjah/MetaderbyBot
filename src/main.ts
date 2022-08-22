@@ -5,7 +5,7 @@ import { ethers } from "ethers";
 import { writeFileSync } from "fs";
 import { raceClass, raceFees } from "./constants";
 
-const API = "https://serv.derby.dbytothemoon.com";
+const API = "https://serv1.be.dbytothemoon.com";
 const DERBY_VAULT = "0x3F642AA39962FE7C3A2fb5dEe8a524FE8138ad05";
 const LOOP_TIME_MIN = 10;
 
@@ -13,17 +13,29 @@ const provider = new Provider();
 
 let token: string;
 const main = async () => {
-  let gains = 0;
+  let totalGains = 0;
   while (true) {
+    let gains = 0;
     try {
       token = await connect();
       let horses: any[] = await listHorses();
-      const energy = horses.map((h) => ({
+      // console.log(horses)
+      const stats = horses.map((h) => ({
         name: h.horse_name,
         energy: h.energy,
         points: h.points,
+        dailyRewardGained: h.daily_reward_countdown > 0,
+        nextDailyReward:
+          h.daily_reward_countdown > 0
+            ? new Date(
+                Date.now() + h.daily_reward_countdown * 1000
+              ).toLocaleString()
+            : "-",
+        nextEnergy: new Date(
+          Date.now() + h.next_energy * 1000
+        ).toLocaleTimeString(),
       }));
-      console.log(energy);
+      console.log(stats);
       const horseToRace = horses.filter(
         (h) => h.daily_reward_countdown < 0 || h.energy === 10
       );
@@ -32,17 +44,26 @@ const main = async () => {
         console.log("results", results);
         gains = results.reduce(
           (acc, r) => acc + r.gain - raceFees[r.class as raceClass],
-          gains
+          0
         );
-        console.log("total gains", gains);
-        horses = await listHorses();
-        if (horses.some((h) => h.daily_reward_countdown < 0)) {
+        totalGains += gains
+        console.log(`total gains: ${totalGains} (${gains > 0 ? '+': ''}${gains})`);
+        if (
+          horses.some(
+            (h, idx) =>
+              h.daily_reward_countdown < 0 &&
+              results.find((r) => r.horseId === h.horse_id).rank > 3
+          )
+        ) {
+          console.log("waiting for race end");
+          await delay(100 * 1000);
           continue;
         }
       }
     } catch (err: any) {
       console.log("err:", err?.code, err?.message);
     }
+
     await delay(LOOP_TIME_MIN * 60 * 1000);
   }
 };
@@ -187,7 +208,6 @@ const findRace = async (horses: any[]): Promise<any[]> => {
         console.log(anim);
         n++;
         r.raceId = res?.data?.data?.racing_id;
-
         if (!r.raceId) {
           await delay(2000);
         }
@@ -240,10 +260,7 @@ const findRace = async (horses: any[]): Promise<any[]> => {
       race.gain = gain + daily_reward;
       race.mmr = results.delta_point;
 
-      console.log(`${race.name} race_settlement`, results);
-      console.log(`${race.name} rank`, results.rank);
-      console.log(`${race.name} points`, results.delta_point);
-      console.log(`${race.name} gain`, gain);
+      // console.log(`${race.name} race_settlement`, results);
     })
   );
 

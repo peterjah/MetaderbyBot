@@ -7,9 +7,9 @@ export enum raceClass {
 }
 
 export const raceFees = {
-  [raceClass.CLASS_5]: 70,
-  [raceClass.CLASS_4]: 100,
-  [raceClass.CLASS_3]: 135,
-  [raceClass.CLASS_2]: 190,
-  [raceClass.CLASS_1]: 250,
+  [raceClass.CLASS_5]: 20,
+  [raceClass.CLASS_4]: 30,
+  [raceClass.CLASS_3]: 45,
+  [raceClass.CLASS_2]: 65,
+  [raceClass.CLASS_1]: 100,
 };
