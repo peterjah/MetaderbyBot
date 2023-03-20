@@ -5,7 +5,7 @@ import { ethers } from "ethers";
 import { writeFileSync } from "fs";
 import { raceClass, raceFees } from "./constants";
 
-const API = "https://serv1.be.dbytothemoon.com";
+const API = "https://serv1.be.dbytothemoon.com/avax";
 const DERBY_VAULT = "0x3F642AA39962FE7C3A2fb5dEe8a524FE8138ad05";
 const LOOP_TIME_MIN = 10;
 
@@ -37,28 +37,33 @@ const main = async () => {
       }));
       console.log(stats);
       const horseToRace = horses.filter(
-        (h) => h.daily_reward_countdown < 0 || h.energy === 10
+        (h) => h.daily_reward_countdown < 0 || h.energy >= 10
       );
       const results = await findRace(horseToRace);
+
       if (results.length) {
         console.log("results", results);
         gains = results.reduce(
           (acc, r) => acc + r.gain - raceFees[r.class as raceClass],
           0
         );
-        totalGains += gains
-        console.log(`total gains: ${totalGains} (${gains > 0 ? '+': ''}${gains})`);
-        if (
-          horses.some(
-            (h, idx) =>
-              h.daily_reward_countdown < 0 &&
-              results.find((r) => r.horseId === h.horse_id).rank > 3
-          )
-        ) {
-          console.log("waiting for race end");
-          await delay(100 * 1000);
-          continue;
-        }
+      }
+      totalGains += gains;
+      console.log(
+        `total gains: ${totalGains} (${gains > 0 ? "+" : ""}${gains})`
+      );
+
+      if (
+        horses.some(
+          (h, idx) =>
+            h.daily_reward_countdown < 0 &&
+            results.length &&
+            results.find((r) => r.horseId === h.horse_id)?.rank > 3
+        )
+      ) {
+        console.log("waiting for race end");
+        await delay(100 * 1000);
+        continue;
       }
     } catch (err: any) {
       console.log("err:", err?.code, err?.message);
@@ -112,6 +117,7 @@ const connect = async (): Promise<string> => {
   const msg = {
     wallet_addr: await provider.adminWallet.getAddress(),
     timestamp: Math.floor(Date.now() / 1000),
+    chain_id: 43114,
   };
   const signature = provider.signMessage(JSON.stringify(msg));
 
@@ -178,7 +184,7 @@ const findRace = async (horses: any[]): Promise<any[]> => {
       class: horse.class,
     });
     console.log(`${name}: register number: ${orderId}. wait for race start`);
-    await delay(3100);
+    await delay(2100);
   }
 
   await Promise.all(
