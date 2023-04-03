@@ -115,15 +115,16 @@ const listHorses = async () => {
 
 const connect = async (): Promise<string> => {
   const msg = {
-    wallet_addr: await provider.adminWallet.getAddress(),
+    wallet_addr: (await provider.adminWallet.getAddress()).toLowerCase(),
     timestamp: Math.floor(Date.now() / 1000),
     chain_id: 43114,
   };
-  const signature = provider.signMessage(JSON.stringify(msg));
 
+  const signature = provider.signMessage(JSON.stringify(msg));
   const login = await axios.post(`${API}/account/launcher`, {
     json_string: JSON.stringify(msg),
     sign: signature,
+    wallet: "Ethereum"
   });
   return login.data.data.Token;
 };
